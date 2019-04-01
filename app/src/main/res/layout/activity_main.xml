@@ -1,46 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <TextView
-        android:id="@+id/tv_file_name"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="文件下载名称"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        <ListView
+            android:id="@+id/list_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
 
-    <ProgressBar
-        android:id="@+id/progress_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        style="@style/Base.Widget.AppCompat.ProgressBar.Horizontal"
-        app:layout_constraintTop_toBottomOf="@+id/tv_file_name"/>
-
-    <Button
-        android:id="@+id/btn_start"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_constraintTop_toBottomOf="@+id/progress_bar"
-        app:layout_constraintRight_toLeftOf="@+id/btn_stop"
-        app:layout_constraintLeft_toLeftOf="parent"
-        android:text="开始"/>
-
-    <Button
-        android:id="@+id/btn_stop"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:layout_constraintTop_toBottomOf="@+id/progress_bar"
-        app:layout_constraintLeft_toRightOf="@+id/btn_start"
-        app:layout_constraintRight_toRightOf="parent"
-        android:text="停止"/>
+        </ListView>
 
 
-</android.support.constraint.ConstraintLayout>
+</LinearLayout>

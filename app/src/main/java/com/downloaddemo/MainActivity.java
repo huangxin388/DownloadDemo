@@ -16,10 +16,12 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.downloaddemo.adapter.MyAdapter;
 import com.downloaddemo.bean.FileBean;
 import com.downloaddemo.bean.ThreadBean;
 import com.downloaddemo.db.DBHelper;
@@ -27,23 +29,39 @@ import com.downloaddemo.db.ThreadDAO;
 import com.downloaddemo.db.ThreadDAOImpl;
 import com.downloaddemo.service.DownloadService;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class MainActivity extends AppCompatActivity {
 
-    private TextView tvFileName;
-    private ProgressBar progressBar;
-    private Button btnStop, btnStart;
     public static final String FILE_URL = "http://down.360safe.com/yunpan/360wangpan_setup_6.5.6.1288.exe";
     private BroadcastReceiver receiver;
     private static final String TAG = "MainActivity";
-    private ThreadDAO threadDAO;
+
+    private ListView listView;
+    private List<FileBean> mData;
+    private MyAdapter mAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         requestPermission();
+        initData();
         initView();
         initEvent();
+    }
+
+    private void initData() {
+        mData = new ArrayList<>();
+        FileBean bean = new FileBean(0,FILE_URL,"imooc.apk",100,0);
+        FileBean bean1 = new FileBean(1,FILE_URL,"activator.exe",100,0);
+        FileBean bean2 = new FileBean(2,FILE_URL,"iTunes64Setup",100,0);
+        FileBean bean3 = new FileBean(3,FILE_URL,"BaiduPlayerNetSetup_100.exe",100,0);
+        mData.add(bean);
+        mData.add(bean1);
+        mData.add(bean2);
+        mData.add(bean3);
     }
 
     private void requestPermission() {
@@ -53,43 +71,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initView() {
-        tvFileName = findViewById(R.id.tv_file_name);
-        progressBar = findViewById(R.id.progress_bar);
-        btnStart = findViewById(R.id.btn_start);
-        btnStop = findViewById(R.id.btn_stop);
-        progressBar.setMax(100);
+        listView = findViewById(R.id.list_view);
+        mAdapter = new MyAdapter(MainActivity.this,mData);
+        listView.setAdapter(mAdapter);
     }
     private void initEvent() {
-        btnStart.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this,DownloadService.class);
-                intent.setAction(DownloadService.DOWNLOAD_START);
-                FileBean bean = new FileBean(12,FILE_URL,"360云盘",2048,0);
-                intent.putExtra("fileInfo",bean);
-                startService(intent);
-            }
-        });
 
-        btnStop.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this,DownloadService.class);
-                intent.setAction(DownloadService.DOWNLOAD_STTOP);
-                startService(intent);
-            }
-        });
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(DownloadService.DOWNLOAD_UPDATE);
-
+        filter.addAction(DownloadService.DOWNLOAD_FINISHED);
         receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if(DownloadService.DOWNLOAD_UPDATE.equals(intent.getAction())) {
                     int finish = intent.getIntExtra("loaded",0);
-                    Log.d(TAG, "onReceive: progress = " + finish);
-                    progressBar.setProgress(finish);
+                    int id = intent.getIntExtra("id",0);
+                    int length = intent.getIntExtra("length",0);
+                    mData.get(id).setLength(length);
+                    mAdapter.updateProgress(id,finish);
+                } else if(DownloadService.DOWNLOAD_FINISHED.equals(intent.getAction())) {
+                    FileBean fileBean = (FileBean) intent.getSerializableExtra("fileInfo");
+                    mAdapter.updateProgress(fileBean.getId(),0);
+                    Toast.makeText(MainActivity.this,fileBean.getFileName() + "下载完成",Toast.LENGTH_SHORT).show();
                 }
             }
         };

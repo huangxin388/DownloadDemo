@@ -21,11 +21,11 @@ public class ThreadDAOImpl implements ThreadDAO{
 
     public ThreadDAOImpl(Context context) {
         mContext = context;
-        mHelper = new DBHelper(context);
+        mHelper = DBHelper.getInstance(context);
     }
 
     @Override
-    public void insertThread(ThreadBean threadBean) {
+    public synchronized void insertThread(ThreadBean threadBean) {
         SQLiteDatabase db = mHelper.getWritableDatabase();
         db.execSQL("insert into thread_info(thread_id,url,start,endl,loaded) values(?,?,?,?,?)",
                 new Object[]{threadBean.getId(),threadBean.getUrl(),threadBean.getStart(),threadBean.getEnd(),threadBean.getLoaded()});
@@ -33,15 +33,15 @@ public class ThreadDAOImpl implements ThreadDAO{
     }
 
     @Override
-    public void deleteThread(String url, int thread_id) {
+    public synchronized void deleteThread(String url) {
         SQLiteDatabase db = mHelper.getWritableDatabase();
-        db.execSQL("delete from thread_info where url=? and thread_id=?",
-                new Object[]{url,thread_id});
+        db.execSQL("delete from thread_info where url=?",
+                new Object[]{url});
         db.close();
     }
 
     @Override
-    public void updateThread(String url, int thread_id, int loaded) {
+    public synchronized void updateThread(String url, int thread_id, int loaded) {
         SQLiteDatabase db = mHelper.getWritableDatabase();
         db.execSQL("update thread_info set loaded=? where url=? and thread_id=?",
                 new Object[]{loaded,url,thread_id});
@@ -51,7 +51,7 @@ public class ThreadDAOImpl implements ThreadDAO{
     @Override
     public List<ThreadBean> getThreads(String url) {
         List<ThreadBean> list = new ArrayList<>();
-        SQLiteDatabase db = mHelper.getWritableDatabase();
+        SQLiteDatabase db = mHelper.getReadableDatabase();
         Cursor cursor = db.rawQuery("select * from thread_info where url=?",new String[]{url});
         while (cursor.moveToNext()) {
             ThreadBean bean = new ThreadBean();

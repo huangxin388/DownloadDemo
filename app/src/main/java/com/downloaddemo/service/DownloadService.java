@@ -15,6 +15,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -25,11 +27,13 @@ public class DownloadService extends Service {
     public static final String DOWNLOAD_START = "START";
     public static final String DOWNLOAD_STTOP = "STOP";
     public static final String DOWNLOAD_UPDATE = "UPDATE";
+    public static final String DOWNLOAD_FINISHED = "FINISHED";
     private static final String TAG = "DownloadService";
+
     private static final int MSG_INIT = 0x110;
     public static final String DOWNLOAD_PATH = Environment.getExternalStorageDirectory().getAbsolutePath()
             + "/wechat";
-    private DownloadTask mTask = null;
+    private Map<Integer,DownloadTask> mTasks = new LinkedHashMap<>();
 
     public DownloadService() {
     }
@@ -43,8 +47,9 @@ public class DownloadService extends Service {
                     FileBean bean = (FileBean) msg.obj;
                     Log.d(TAG, "handleMessage: 长度为" + bean.getLength());
                     //启动下载任务
-                    mTask = new DownloadTask(DownloadService.this,bean);
+                    DownloadTask mTask = new DownloadTask(DownloadService.this,bean,3);
                     mTask.download();
+                    mTasks.put(bean.getId(),mTask);
                     break;
             }
         }
@@ -54,10 +59,14 @@ public class DownloadService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if(DOWNLOAD_START.equals(intent.getAction())) {
             FileBean bean = (FileBean) intent.getSerializableExtra("fileInfo");
-            new InitThread(bean).start();
+            InitThread initThread = new InitThread(bean);
+            DownloadTask.sExecutorService.execute(initThread);
+//            new InitThread(bean).start();
         } else if(DOWNLOAD_STTOP.equals(intent.getAction())) {
-            if(mTask != null) {
-                mTask.isPause = true;
+            FileBean bean = (FileBean) intent.getSerializableExtra("fileInfo");
+            DownloadTask task = mTasks.get(bean.getId());
+            if(task != null) {
+                task.isPause = true;
             }
         }
         return super.onStartCommand(intent, flags, startId);

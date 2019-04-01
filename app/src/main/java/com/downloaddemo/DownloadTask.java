@@ -14,7 +14,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -23,31 +27,51 @@ import okhttp3.Response;
 public class DownloadTask {
     private Context mContext;
     private FileBean fileBean;
-    private ThreadDAO dao;
-    private int mFinished = 0;
-    public boolean isPause = false;
+    private ThreadDAO dao;//数据库封装增删改查方法的接口
+    private int mFinished = 0;//记录下载进度
+    public boolean isPause = false;//用来暂停线程
+    private int mThreadCount;//设置的线程数量
     private static final String TAG = "DownloadTask";
+    private List<DownloadThread> mThreadList;//开启的线程列表
+    public static ExecutorService sExecutorService = Executors.newCachedThreadPool();//带缓存的线程池
 
-    public DownloadTask(Context mContext,FileBean fileBean) {
+    public DownloadTask(Context mContext,FileBean fileBean,int threadCount) {
         this.mContext = mContext;
         this.fileBean = fileBean;
+        this.mThreadCount = threadCount;
         dao = new ThreadDAOImpl(mContext);
     }
 
     public void download() {
         List<ThreadBean> threadInfos = dao.getThreads(fileBean.getUrl());
-        ThreadBean bean = null;
         if(threadInfos.size() == 0) {
-            bean = new ThreadBean(fileBean.getId(),fileBean.getUrl(),0, fileBean.getLength(),0);
-        } else {
-            bean = threadInfos.get(0);
+            //第一次下载，之前没有记录
+            int length = fileBean.getLength() / mThreadCount;
+            for(int i = 0;i < mThreadCount;i++) {
+                ThreadBean threadBean = new ThreadBean(i,fileBean.getUrl(),i*length,(i+1)*length-1,0);
+                if(i == mThreadCount - 1) {
+                    threadBean.setEnd(fileBean.getLength());
+                }
+                threadInfos.add(threadBean);
+                //向数据库中插入信息
+                dao.insertThread(threadBean);
+            }
         }
-        new DownloadThread(bean).start();
+        mThreadList = new ArrayList<>();
+        //启动多个线程进行下载
+        for(ThreadBean threadBean:threadInfos) {
+            DownloadThread thread = new DownloadThread(threadBean);
+//            thread.start();
+            //使用线程池管理线程
+            DownloadTask.sExecutorService.execute(thread);
+            mThreadList.add(thread);
+        }
     }
 
 
     class DownloadThread extends Thread {
         ThreadBean threadBean;
+        public boolean isFinished = false;//判断单个线程是否运行完毕
 
         public DownloadThread(ThreadBean threadBean) {
             this.threadBean = threadBean;
@@ -56,10 +80,6 @@ public class DownloadTask {
         @Override
         public void run() {
             super.run();
-            //向数据库中插入信息
-            if(!dao.isExists(threadBean.getUrl())) {
-                dao.insertThread(threadBean);
-            }
             //设置下载位置
             long start = threadBean.getStart() + threadBean.getLoaded();
             OkHttpClient client = new OkHttpClient();
@@ -85,19 +105,24 @@ public class DownloadTask {
                     while((len = in.read(bytes)) != -1) {
                         raf.write(bytes,0,len);
                         mFinished += len;
-                        if(System.currentTimeMillis() - time > 200) {
+                        threadBean.setLoaded(threadBean.getLoaded() + len);
+                        if(System.currentTimeMillis() - time > 1000) {
                             time = System.currentTimeMillis();
-                            intent.putExtra("loaded",mFinished*100/fileBean.getLength());
+                            //发送广播，更新进度
+                            intent.putExtra("loaded",mFinished);
+                            intent.putExtra("id",fileBean.getId());
+                            intent.putExtra("length",fileBean.getLength());
                             mContext.sendBroadcast(intent);
                         }
                         if(isPause) {
-                            dao.updateThread(threadBean.getUrl(),threadBean.getId(),mFinished);
+                            dao.updateThread(threadBean.getUrl(),threadBean.getId(),threadBean.getLoaded());
                             return;
                         }
                     }
-                    intent.putExtra("loaded",mFinished*100/fileBean.getLength());
+                    isFinished = true;
+                    intent.putExtra("loaded",mFinished);
                     mContext.sendBroadcast(intent);
-                    dao.deleteThread(threadBean.getUrl(),threadBean.getId());
+                    checkAllThreadsFinished();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -109,6 +134,27 @@ public class DownloadTask {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+    /**
+     * 判断是否所有线程都执行完毕
+     */
+    public synchronized void checkAllThreadsFinished() {
+        boolean allFinished = true;
+        for(DownloadThread downloadThread:mThreadList) {
+            if(!downloadThread.isFinished) {
+                allFinished = false;
+                break;
+            }
+        }
+        if(allFinished) {
+            //删除线程信息
+            dao.deleteThread(fileBean.getUrl());
+            //发送广播，提示下载完毕
+            Intent intent = new Intent(DownloadService.DOWNLOAD_FINISHED);
+            intent.putExtra("fileInfo",fileBean);
+            mContext.sendBroadcast(intent);
         }
     }
 }
